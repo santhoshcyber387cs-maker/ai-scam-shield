@@ -1,11 +1,8 @@
 import os, pickle, sqlite3, re
 from flask import Flask, render_template, request, jsonify
-from PIL import Image
-import easyocr
 from pypdf import PdfReader
 
 app = Flask(__name__)
-reader = easyocr.Reader(['en'])
 
 def init_db():
     conn = sqlite3.connect('scam_history.db')
@@ -88,13 +85,7 @@ def predict():
         extracted_text = ""
         filename = file.filename.lower()
 
-        if filename.endswith(('.png', '.jpg', '.jpeg', '.webp')):
-            image = Image.open(file.stream)
-            image.save("temp_img.png")
-            results = reader.readtext("temp_img.png", detail=0)
-            extracted_text = " ".join(results)
-            if os.path.exists("temp_img.png"): os.remove("temp_img.png")
-        elif filename.endswith('.pdf'):
+        if filename.endswith('.pdf'):
             pdf_reader = PdfReader(file.stream)
             for page in pdf_reader.pages:
                 extracted_text += page.extract_text() or ""
