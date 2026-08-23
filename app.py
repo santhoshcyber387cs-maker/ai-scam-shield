@@ -6,7 +6,7 @@ from sklearn.naive_bayes import MultinomialNB
 
 app = Flask(__name__)
 
-# Train a fast lightweight model in memory on app startup
+# Basic dataset to train in-memory model
 sample_texts = [
     "Urgent! Your account is blocked. Click here to verify KYC immediately.",
     "Dear customer, share OTP to unblock your bank account now.",
@@ -17,7 +17,7 @@ sample_texts = [
     "Please find attached the report for your recent assignment.",
     "Thanks for your purchase! Your invoice is available online."
 ]
-labels = [1, 1, 1, 1, 0, 0, 0, 0] # 1: Scam, 0: Safe
+labels = [1, 1, 1, 1, 0, 0, 0, 0]
 
 vectorizer = TfidfVectorizer()
 X = vectorizer.fit_transform(sample_texts)
@@ -25,20 +25,23 @@ model = MultinomialNB()
 model.fit(X, labels)
 
 def init_db():
-    conn = sqlite3.connect('scam_history.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS scan_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_input TEXT,
-            status TEXT,
-            risk_score TEXT,
-            reason TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect('/tmp/scam_history.db')
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS scan_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_input TEXT,
+                status TEXT,
+                risk_score TEXT,
+                reason TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Database Init Error: {e}")
 
 init_db()
 
@@ -54,7 +57,7 @@ def extract_reasons(text):
     return reasons if reasons else ["Potential suspicious pattern identified"]
 
 def analyze_text(user_text):
-    if not user_text.strip():
+    if not user_text or not user_text.strip():
         return {"error": "No text detected"}
 
     text_vectorized = vectorizer.transform([user_text])
@@ -68,14 +71,17 @@ def analyze_text(user_text):
     action = "BLOCK & ALERT: Do not share OTP or click links." if prediction == 1 else "ALLOW: Content appears safe."
     speech_text = f"Warning! High Risk Scam detected with {risk_score} percent confidence." if prediction == 1 else f"Content appears Safe with {risk_score} percent confidence."
 
-    conn = sqlite3.connect('scam_history.db')
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO scan_history (user_input, status, risk_score, reason) VALUES (?, ?, ?, ?)",
-        (user_text[:100], status, f"{risk_score}%", ", ".join(matched_reasons))
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect('/tmp/scam_history.db')
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO scan_history (user_input, status, risk_score, reason) VALUES (?, ?, ?, ?)",
+            (user_text[:100], status, f"{risk_score}%", ", ".join(matched_reasons))
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Database Insert Error: {e}")
 
     return {
         "extracted_text": user_text,
@@ -92,24 +98,28 @@ def home():
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    if request.is_json:
-        return jsonify(analyze_text(request.get_json().get("text", "")))
+    try:
+        if request.is_json:
+            data = request.get_json() or {}
+            return jsonify(analyze_text(data.get("text", "")))
 
-    if 'file' in request.files:
-        file = request.files['file']
-        extracted_text = ""
-        filename = file.filename.lower()
+        if 'file' in request.files:
+            file = request.files['file']
+            extracted_text = ""
+            filename = file.filename.lower() if file.filename else ""
 
-        if filename.endswith('.pdf'):
-            pdf_reader = PdfReader(file.stream)
-            for page in pdf_reader.pages:
-                extracted_text += page.extract_text() or ""
-        elif filename.endswith('.txt'):
-            extracted_text = file.read().decode('utf-8')
+            if filename.endswith('.pdf'):
+                pdf_reader = PdfReader(file.stream)
+                for page in pdf_reader.pages:
+                    extracted_text += page.extract_text() or ""
+            elif filename.endswith('.txt'):
+                extracted_text = file.read().decode('utf-8')
 
-        return jsonify(analyze_text(extracted_text))
+            return jsonify(analyze_text(extracted_text))
 
-    return jsonify({"error": "Invalid request"}), 400
+        return jsonify({"error": "Invalid request"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000)
