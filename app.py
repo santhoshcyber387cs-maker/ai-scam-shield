@@ -1,8 +1,28 @@
-import os, pickle, sqlite3, re
+import os, sqlite3, re
 from flask import Flask, render_template, request, jsonify
 from pypdf import PdfReader
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
 
 app = Flask(__name__)
+
+# Train a fast lightweight model in memory on app startup
+sample_texts = [
+    "Urgent! Your account is blocked. Click here to verify KYC immediately.",
+    "Dear customer, share OTP to unblock your bank account now.",
+    "You won a cash prize of $1000! Claim your reward at bit.ly/scam123",
+    "Please send your password and PAN card details for verification.",
+    "Hello, how are you doing today?",
+    "Meeting scheduled for tomorrow at 10 AM.",
+    "Please find attached the report for your recent assignment.",
+    "Thanks for your purchase! Your invoice is available online."
+]
+labels = [1, 1, 1, 1, 0, 0, 0, 0] # 1: Scam, 0: Safe
+
+vectorizer = TfidfVectorizer()
+X = vectorizer.fit_transform(sample_texts)
+model = MultinomialNB()
+model.fit(X, labels)
 
 def init_db():
     conn = sqlite3.connect('scam_history.db')
@@ -21,11 +41,6 @@ def init_db():
     conn.close()
 
 init_db()
-
-with open('vectorizer.pkl', 'rb') as f:
-    vectorizer = pickle.load(f)
-with open('model.pkl', 'rb') as f:
-    model = pickle.load(f)
 
 def extract_reasons(text):
     reasons = []
