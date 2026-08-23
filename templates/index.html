@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Scam Shield Pro</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: #f8fafc; margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .container { max-width: 700px; width: 100%; background: #1e293b; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        h1 { text-align: center; color: #38bdf8; margin-bottom: 20px; }
+        textarea { width: 100%; height: 120px; padding: 12px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 14px; box-sizing: border-box; resize: none; }
+        .btn-group { display: flex; gap: 10px; margin-top: 15px; }
+        button, input[type="file"] { flex: 1; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .btn-analyze { background: #0284c7; color: white; }
+        .btn-analyze:hover { background: #0369a1; }
+        .result-box { margin-top: 25px; padding: 20px; border-radius: 8px; background: #334155; display: none; }
+        .status-high { color: #f87171; font-weight: bold; font-size: 20px; }
+        .status-safe { color: #4ade80; font-weight: bold; font-size: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛡️ AI Scam Shield Pro</h1>
+        <p>Enter suspicious text or upload SMS screenshots / PDFs to scan for cyber threats:</p>
+        
+        <textarea id="inputText" placeholder="Paste suspicious SMS, Email, or Phishing URL here..."></textarea>
+        
+        <div class="btn-group">
+            <button class="btn-analyze" onclick="analyzeText()">Scan Text</button>
+        </div>
+
+        <div style="margin-top: 15px;">
+            <label style="font-size: 14px; color: #94a3b8;">Or Upload File (Image/PDF/TXT):</label><br>
+            <input type="file" id="fileInput" onchange="uploadFile()" style="margin-top: 5px; color: #94a3b8;">
+        </div>
+
+        <div id="resultBox" class="result-box">
+            <div id="statusResult"></div>
+            <p><strong>Risk Score:</strong> <span id="riskScore"></span></p>
+            <p><strong>Extracted Text:</strong> <span id="extractedText"></span></p>
+            <p><strong>Reasons:</strong></p>
+            <ul id="reasonsList"></ul>
+            <p><strong>Recommended Action:</strong> <span id="actionText"></span></p>
+        </div>
+    </div>
+
+    <script>
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        async function analyzeText() {
+            const text = document.getElementById('inputText').value;
+            if(!text) return alert("Please enter some text!");
+
+            const response = await fetch('/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text })
+            });
+            const data = await response.json();
+            displayResult(data);
+        }
+
+        async function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput.files[0]) return;
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            const response = await fetch('/predict', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            displayResult(data);
+        }
+
+        function displayResult(data) {
+            if(data.error) return alert(data.error);
+
+            const resultBox = document.getElementById('resultBox');
+            const statusDiv = document.getElementById('statusResult');
+            
+            resultBox.style.display = 'block';
+            statusDiv.className = data.status === 'HIGH RISK SCAM' ? 'status-high' : 'status-safe';
+            statusDiv.innerText = "Status: " + data.status;
+
+            document.getElementById('riskScore').innerText = data.risk_score;
+            document.getElementById('extractedText').innerText = data.extracted_text;
+            document.getElementById('actionText').innerText = data.action;
+
+            const reasonsList = document.getElementById('reasonsList');
+            reasonsList.innerHTML = '';
+            data.reasons.forEach(r => {
+                let li = document.createElement('li');
+                li.innerText = r;
+                reasonsList.appendChild(li);
+            });
+
+            speak(data.speech_text);
+        }
+    </script>
+</body>
+</html>
